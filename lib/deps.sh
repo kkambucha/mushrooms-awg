@@ -143,12 +143,25 @@ path.write_text(text, encoding="utf-8")
 PY
 }
 
-_ufw_allow_once() {
-  # Drop duplicate copies of the same allow rule, then add one.
-  # ufw delete exits non-zero when the rule is already gone — that ends the loop under set -e.
+_ufw_rule_listed() {
   local rule="$1"
-  while ufw --force delete allow "$rule" >/dev/null 2>&1; do
-    :
+  # Match To-column entries like "22/tcp" or "22/tcp (OpenSSH)".
+  LC_ALL=C ufw status 2>/dev/null | grep -qE "^${rule}([[:space:]]| \\()"
+}
+
+_ufw_allow_once() {
+  # Drop duplicate allow rules (bounded: ufw delete often exits 0 even when gone).
+  local rule="$1"
+  local i=0
+  local max=32
+  while ((i < max)); do
+    if ! _ufw_rule_listed "$rule"; then
+      break
+    fi
+    if ! ufw --force delete allow "$rule" >/dev/null 2>&1; then
+      break
+    fi
+    i=$((i + 1))
   done
   ufw allow "$rule"
 }
@@ -190,19 +203,31 @@ configure_ufw() {
     warn "Firewall is already on. Existing SSH rules were left unchanged. Opening tunnel UDP ${port} only."
   else
     for p in "${ssh_ports[@]}"; do
-      _ufw_allow_once "${p}/tcp"
+      if ! _ufw_allow_once "${p}/tcp"; then
+        warn "Could not open SSH TCP ${p}. Open it manually if needed. Continuing install."
+        return 0
+      fi
     done
     log "Firewall allows SSH on TCP: ${ssh_ports[*]}"
   fi
 
-  _ufw_allow_once "${port}/udp"
+  if ! _ufw_allow_once "${port}/udp"; then
+    warn "Could not open tunnel UDP ${port}. Open it manually if needed. Continuing install."
+    return 0
+  fi
   log "Firewall allows tunnel UDP ${port}"
 
   if [[ "$active" == "false" ]]; then
-    ufw --force enable
+    if ! ufw --force enable; then
+      warn "ufw enable failed. Allow rules may be present but firewall is still off. Continuing install."
+      return 0
+    fi
+  else
+    if ! ufw reload; then
+      warn "ufw reload failed. Continuing install."
+      return 0
+    fi
   fi
-  sysctl -w net.ipv4.ip_forward=1 >/dev/null
-  ufw reload
   sysctl -w net.ipv4.ip_forward=1 >/dev/null
   UFW_RELOADED="true"
 }
