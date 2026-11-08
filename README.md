@@ -1,13 +1,15 @@
 # Mushrooms-AWG — установщик AmneziaWG
 
-Интерактивный установщик для Ubuntu: поднимает **AmneziaWG** в Docker (образ **amneziavpn/amneziawg-go:3.1.20260828**).  
+Интерактивный установщик для Ubuntu: поднимает **AmneziaWG** в Docker.  
 Домен обязателен. Клиентские конфиги используют домен как Endpoint — после смены IP сервера достаточно обновить A-запись.
 
 Нужен сервер amd64 (обычный Intel/AMD). На ARM установщик останавливается и не трогает файрвол, пока не установлен эмулятор `qemu-user-static`.
 
-Файрвол включается после успешного старта туннеля. Открывается порт, по которому сейчас заходите на сервер, и порт туннеля (tcp или udp). Если порт входа определить не удалось, файрвол не включается. Зависание на «Configuring firewall» из‑за бесконечного `ufw delete` исправлено.
+**Образы:** ключи генерируются через официальный `amneziavpn/amneziawg-go:3.1.20260828` (UDP-only UAPI). Runtime для TCP собирается локально из `docker/Dockerfile` (форк isgulkov с UAPI `network=tcp`) → `mushrooms-awg/amneziawg-go:tcp`. Первый install делает `docker compose build` (нужен интернет, дольше обычного pull).
 
-По умолчанию туннель — **TCP 443**. В визарде можно сменить порт и транспорт (tcp/udp). На сервере TCP задаётся через UAPI (`awg/transport.uapi` + `start.sh`): в `awg0.conf` нет строк `Network`/`Format*` — `awg setconf` в образе их не принимает. В клиентском `.conf`/`QR` по-прежнему `Network` и Format*. После смены порта/транспорта заново раздай conf/QR. Клиент: AmneziaWG / Amnezia VPN с поддержкой `Network=tcp`.
+Файрвол включается после успешного старта туннеля. Открывается порт входа (SSH) и порт туннеля (tcp/udp). Зависание на «Configuring firewall» из‑за бесконечного `ufw delete` исправлено.
+
+По умолчанию туннель — **TCP 443**. На сервере TCP задаётся через UAPI (`awg/transport.uapi` + `socat` в `start.sh`); в `awg0.conf` нет `Network`/`Format*`. В клиентском `.conf`/`QR` — `Network` и Format*. После смены порта/транспорта заново раздай conf/QR. Клиент: AmneziaWG / Amnezia VPN с поддержкой `Network=tcp`.
 
 ## Установка
 

@@ -49,7 +49,8 @@ SERVER
   Domain:         ${DOMAIN}
   Public IP:      ${PUBLIC_IP:-unknown}
   Listen:         ${AWG_PORT}/${AWG_NETWORK}
-  Image:          ${AWG_IMAGE}
+  Keygen image:   ${AWG_IMAGE}
+  Runtime image:  ${AWG_RUNTIME_IMAGE:-mushrooms-awg/amneziawg-go:tcp}
   Interface:      awg0 (${SERVER_ADDRESS})
 
 CLIENT PROFILES

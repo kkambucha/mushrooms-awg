@@ -1,7 +1,10 @@
 services:
   amneziawg:
-    # Pinned: AmneziaWG userspace + tools verified for AWG 2.x-compatible client .conf
-    image: amneziavpn/amneziawg-go:3.1.20260828
+    # Built locally: isgulkov amneziawg-go (TCP UAPI) + official awg tools. See docker/Dockerfile.
+    image: __AWG_RUNTIME_IMAGE__
+    build:
+      context: __DOCKER_BUILD_CONTEXT__
+      dockerfile: Dockerfile
     platform: linux/amd64
     container_name: mushrooms_awg
     restart: unless-stopped

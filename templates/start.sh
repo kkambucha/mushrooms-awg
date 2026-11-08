@@ -7,17 +7,34 @@ CONF="/opt/amnezia/awg/awg0.conf"
 UAPI_FILE="/opt/amnezia/awg/transport.uapi"
 [[ -f "$CONF" ]] || { echo "ERROR: missing ${CONF}"; exit 1; }
 
+_ensure_socat() {
+  if command -v socat >/dev/null 2>&1; then
+    return 0
+  fi
+  if command -v apk >/dev/null 2>&1; then
+    echo "Installing socat (needed for AmneziaWG UAPI)"
+    apk add --no-cache socat >/dev/null
+  fi
+  command -v socat >/dev/null 2>&1 || {
+    echo "ERROR: socat is required to apply transport via UAPI" >&2
+    return 1
+  }
+}
+
 # Down any previous interface (restart path)
 awg-quick down "$CONF" 2>/dev/null || true
 awg-quick up "$CONF"
 
-_find_awg_sock() {
-  local s
-  for s in /var/run/amneziawg/awg0.sock /var/run/wireguard/awg0.sock; do
-    if [[ -S "$s" ]]; then
-      printf '%s' "$s"
-      return 0
-    fi
+_wait_awg_sock() {
+  local s i
+  for i in $(seq 1 30); do
+    for s in /var/run/amneziawg/awg0.sock /var/run/wireguard/awg0.sock; do
+      if [[ -S "$s" ]]; then
+        printf '%s' "$s"
+        return 0
+      fi
+    done
+    sleep 0.5
   done
   return 1
 }
@@ -25,19 +42,9 @@ _find_awg_sock() {
 _uapi_set() {
   local sock="$1"
   local body="$2"
-  local reply line
-  # Bash can open a UNIX stream socket with <> on Linux.
-  exec 3<>"$sock" || return 1
-  # Trailing blank line ends the UAPI request.
-  printf 'set=1\n%s\n' "$body" >&3
-  reply=""
-  while IFS= read -r -t 3 line <&3; do
-    reply+="${line}"$'\n'
-    case "$line" in
-      errno=*) break ;;
-    esac
-  done || true
-  exec 3>&- 3<&- || true
+  local reply
+  # Must connect(2) via socat — bash exec <> uses open(2) and fails with ENXIO.
+  reply="$(printf 'set=1\n%s\n' "$body" | socat -t 5 - "UNIX-CONNECT:${sock}" 2>/dev/null || true)"
   printf '%s' "$reply"
   printf '%s' "$reply" | grep -q 'errno=0'
 }
@@ -47,8 +54,10 @@ _apply_transport_uapi() {
     echo "WARN: missing ${UAPI_FILE}; leaving default UDP transport"
     return 0
   }
-  local sock body network listen_port reply
-  sock="$(_find_awg_sock)" || {
+  _ensure_socat
+
+  local sock body network listen_port reply i
+  sock="$(_wait_awg_sock)" || {
     echo "ERROR: AmneziaWG UAPI socket not found after awg-quick up" >&2
     return 1
   }
@@ -57,7 +66,16 @@ _apply_transport_uapi() {
   listen_port="$(awk -F' *= *' 'tolower($1)=="listenport"{print $2; exit}' "$CONF")"
 
   echo "Applying transport UAPI from ${UAPI_FILE} via ${sock}"
-  if ! reply="$(_uapi_set "$sock" "$body")"; then
+  reply=""
+  for i in 1 2 3 4 5 6 7 8; do
+    if reply="$(_uapi_set "$sock" "$body")"; then
+      break
+    fi
+    echo "UAPI attempt ${i} failed; retrying..."
+    sleep 1
+    sock="$(_wait_awg_sock)" || true
+  done
+  if ! printf '%s' "$reply" | grep -q 'errno=0'; then
     echo "ERROR: UAPI set failed (daemon rejected transport?). Reply:" >&2
     echo "$reply" >&2
     return 1
@@ -69,7 +87,6 @@ _apply_transport_uapi() {
       echo "ERROR: could not parse ListenPort from ${CONF}" >&2
       return 1
     }
-    local i
     for i in 1 2 3 4 5 6 7 8 9 10; do
       if ss -tln 2>/dev/null | grep -qE ":${listen_port}\\b"; then
         echo "TCP listen OK on :${listen_port}"

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Prepare deploy directory and start AmneziaWG container
 
+AWG_RUNTIME_IMAGE="${AWG_RUNTIME_IMAGE:-mushrooms-awg/amneziawg-go:tcp}"
+
 prepare_deploy_dir() {
   log "Preparing deploy directory ${DEPLOY_DIR}"
   mkdir -p \
@@ -8,16 +10,22 @@ prepare_deploy_dir() {
     "${DEPLOY_DIR}/clients" \
     "${DEPLOY_DIR}/state"
 
-  cp "${REPO_DIR}/templates/docker-compose.yml.tpl" "${DEPLOY_DIR}/docker-compose.yml"
+  local tpl out
+  tpl="$(cat "${REPO_DIR}/templates/docker-compose.yml.tpl")"
+  out="${tpl//__AWG_RUNTIME_IMAGE__/${AWG_RUNTIME_IMAGE}}"
+  out="${out//__DOCKER_BUILD_CONTEXT__/${REPO_DIR}/docker}"
+  printf '%s\n' "$out" >"${DEPLOY_DIR}/docker-compose.yml"
+
   cp "${REPO_DIR}/templates/start.sh" "${DEPLOY_DIR}/start.sh"
   chmod 755 "${DEPLOY_DIR}/start.sh"
   log "Deploy directory ready: ${DEPLOY_DIR}"
+  log "Runtime image: ${AWG_RUNTIME_IMAGE} (build context ${REPO_DIR}/docker)"
 }
 
 compose_up() {
-  log "Starting Docker Compose in ${DEPLOY_DIR}"
+  log "Building and starting Docker Compose in ${DEPLOY_DIR}"
   cd "${DEPLOY_DIR}"
-  docker compose pull
+  docker compose build
   docker compose up -d --remove-orphans
 }
 
@@ -29,7 +37,7 @@ wait_for_awg() {
   fi
   log "Waiting for AmneziaWG on ${proto^^} :${AWG_PORT}"
   local i
-  for i in $(seq 1 45); do
+  for i in $(seq 1 90); do
     if docker ps --format '{{.Names}} {{.Status}}' | grep -q '^mushrooms_awg .*Up'; then
       if ss $ss_flag | grep -qE ":${AWG_PORT}\\b"; then
         if docker exec mushrooms_awg awg show awg0 >/dev/null 2>&1; then
