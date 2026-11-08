@@ -9,7 +9,7 @@
 
 Файрвол включается после успешного старта туннеля. Открывается порт входа (SSH) и порт туннеля (tcp/udp). Зависание на «Configuring firewall» из‑за бесконечного `ufw delete` исправлено.
 
-По умолчанию туннель — **TCP 443**. На сервере TCP задаётся через UAPI (`awg/transport.uapi` + `socat` в `start.sh`); в `awg0.conf` нет `Network`/`Format*`. В клиентском `.conf`/`QR` — `Network` и Format*. После смены порта/транспорта заново раздай conf/QR. Клиент: AmneziaWG / Amnezia VPN с поддержкой `Network=tcp`.
+По умолчанию туннель — **UDP 443** (импорт QR/conf в AmneziaWG на iOS). В `awg0.conf` нет `Network`/`Format*`; для UDP в `transport.uapi` только `network=udp`. TCP (визард) задаётся через UAPI (`format_*` + `socat` в `start.sh`) и пишет `Network`/`Format*` в клиентский conf — iOS AmneziaWG такие профили не принимает. После смены порта/транспорта заново раздай conf/QR.
 
 ## Установка
 
@@ -46,5 +46,5 @@ docker exec mushrooms_awg awg show
 
 ## Что генерируется само
 
-Ключи сервера и клиентов, PSK, параметры обфускации AmneziaWG (`Jc`/`Jmin`/`Jmax`/`S1`–`S4`/`H1`–`H4`). Порт по умолчанию 443, транспорт **tcp** (можно сменить в визарде).  
+Ключи сервера и клиентов, PSK, параметры обфускации AmneziaWG (`Jc`/`Jmin`/`Jmax`/`S1`–`S4`/`H1`–`H4`). Порт по умолчанию 443, транспорт **udp** (можно сменить на tcp в визарде).  
 В визарде достаточно домена (при переносе — вставка или путь к `server.json`).

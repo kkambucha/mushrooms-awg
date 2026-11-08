@@ -87,9 +87,15 @@ create_new_state() {
   port="${WIZARD_PORT:-443}"
   [[ "$port" =~ ^[0-9]+$ ]] || die "Tunnel port must be a number"
   (( port >= 1 && port <= 65535 )) || die "Tunnel port must be between 1 and 65535"
-  local network="${WIZARD_NETWORK:-tcp}"
+  local network="${WIZARD_NETWORK:-udp}"
   [[ "$network" == "tcp" || "$network" == "udp" ]] || die "Transport must be tcp or udp"
   generate_obfuscation
+
+  local format_in="" format_out=""
+  if [[ "$network" == "tcp" ]]; then
+    format_in="$AWG_DEFAULT_FORMAT_IN"
+    format_out="$AWG_DEFAULT_FORMAT_OUT"
+  fi
 
   local clients_json="[]"
   local i used_octets=()
@@ -118,8 +124,8 @@ create_new_state() {
     --arg domain "$DOMAIN" \
     --argjson port "$port" \
     --arg network "$network" \
-    --arg format_in "$AWG_DEFAULT_FORMAT_IN" \
-    --arg format_out "$AWG_DEFAULT_FORMAT_OUT" \
+    --arg format_in "$format_in" \
+    --arg format_out "$format_out" \
     --arg server_priv "$server_priv" \
     --arg server_pub "$server_pub" \
     --arg subnet "10.8.1.0/24" \
@@ -236,16 +242,22 @@ apply_wizard_port() {
 
 ensure_transport_in_state() {
   # Fill transport block; apply wizard network; remember previous proto for UFW.
+  # UDP: empty formats (iOS AmneziaWG). TCP: require stream framing formats.
   local net fmt_in fmt_out current_net
-  net="${WIZARD_NETWORK:-tcp}"
+  net="${WIZARD_NETWORK:-udp}"
   [[ "$net" == "tcp" || "$net" == "udp" ]] || die "Transport must be tcp or udp"
 
   current_net="$(jq -r '.transport.network // empty' <<<"$STATE_JSON")"
   fmt_in="$(jq -r '.transport.format_in // empty' <<<"$STATE_JSON")"
   fmt_out="$(jq -r '.transport.format_out // empty' <<<"$STATE_JSON")"
-  if [[ -z "$fmt_in" || -z "$fmt_out" ]]; then
-    fmt_in="$AWG_DEFAULT_FORMAT_IN"
-    fmt_out="$AWG_DEFAULT_FORMAT_OUT"
+  if [[ "$net" == "tcp" ]]; then
+    if [[ -z "$fmt_in" || -z "$fmt_out" ]]; then
+      fmt_in="$AWG_DEFAULT_FORMAT_IN"
+      fmt_out="$AWG_DEFAULT_FORMAT_OUT"
+    fi
+  else
+    fmt_in=""
+    fmt_out=""
   fi
 
   if [[ -z "$current_net" ]]; then
@@ -325,8 +337,12 @@ validate_state_json() {
     def transport_bad:
       if (.transport | type) != "object" then empty
       elif (.transport.network != "tcp" and .transport.network != "udp") then "transport.network"
-      elif (.transport.format_in | type) != "string" or (.transport.format_in | length) == 0 then "transport.format_in"
-      elif (.transport.format_out | type) != "string" or (.transport.format_out | length) == 0 then "transport.format_out"
+      elif .transport.network == "tcp" and (
+          (.transport.format_in | type) != "string" or (.transport.format_in | length) == 0
+        ) then "transport.format_in"
+      elif .transport.network == "tcp" and (
+          (.transport.format_out | type) != "string" or (.transport.format_out | length) == 0
+        ) then "transport.format_out"
       else empty end;
     [base[], obf, clients_bad, psk_bad, transport_bad] | .[]
   ' <<<"$json")" || die "Server file could not be checked. Firewall was not changed."
@@ -339,7 +355,7 @@ validate_state_json() {
 
 export_state_vars() {
   AWG_PORT="$(jq -r '.port' <<<"$STATE_JSON")"
-  AWG_NETWORK="$(jq -r '.transport.network // "tcp"' <<<"$STATE_JSON")"
+  AWG_NETWORK="$(jq -r '.transport.network // "udp"' <<<"$STATE_JSON")"
   AWG_FORMAT_IN="$(jq -r '.transport.format_in // empty' <<<"$STATE_JSON")"
   AWG_FORMAT_OUT="$(jq -r '.transport.format_out // empty' <<<"$STATE_JSON")"
   SERVER_PRIVATE_KEY="$(jq -r '.server_private_key' <<<"$STATE_JSON")"

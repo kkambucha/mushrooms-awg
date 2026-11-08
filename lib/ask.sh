@@ -48,7 +48,7 @@ ask_config() {
   CLIENT_COUNT="1"
   ADD_CLIENTS="0"
   WIZARD_PORT="443"
-  WIZARD_NETWORK="tcp"
+  WIZARD_NETWORK="udp"
   PREV_AWG_PORT=""
   PREV_AWG_PROTO=""
 
@@ -93,7 +93,7 @@ ask_config() {
   fi
 
   local port_default="443"
-  local network_default="tcp"
+  local network_default="udp"
   if [[ "$RESTORE_MODE" == "true" ]]; then
     local state_domain
     _require_jq
@@ -110,7 +110,7 @@ ask_config() {
     fi
     validate_state_json "$(cat "$STATE_SOURCE")"
     port_default="$(jq -r '.port' "$STATE_SOURCE")"
-    network_default="$(jq -r '.transport.network // "tcp"' "$STATE_SOURCE")"
+    network_default="$(jq -r '.transport.network // "udp"' "$STATE_SOURCE")"
     prompt "How many new clients to add" "0"
     ADD_CLIENTS="${REPLY}"
     [[ "$ADD_CLIENTS" =~ ^[0-9]+$ ]] || die "Client count must be a number"

@@ -65,11 +65,15 @@ EOF
   chmod 600 "${DEPLOY_DIR}/awg/awg0.conf"
 
   # Server awg setconf rejects Network/Format*; apply via UAPI in start.sh.
+  # UDP: network only (Format breaks iOS AmneziaWG handshake if server expects framing).
+  # TCP: network + format_in/format_out.
   local uapi="${DEPLOY_DIR}/awg/transport.uapi"
   {
     printf 'network=%s\n' "${AWG_NETWORK}"
-    printf 'format_in=%s\n' "${AWG_FORMAT_IN}"
-    printf 'format_out=%s\n' "${AWG_FORMAT_OUT}"
+    if [[ "${AWG_NETWORK}" == "tcp" ]]; then
+      printf 'format_in=%s\n' "${AWG_FORMAT_IN}"
+      printf 'format_out=%s\n' "${AWG_FORMAT_OUT}"
+    fi
   } >"$uapi"
   chmod 600 "$uapi"
   log "Wrote ${uapi} (network=${AWG_NETWORK})"
@@ -81,15 +85,20 @@ _write_client_conf() {
   local client_addr="$3"
   local allowed_ips="$4"
   local client_psk="$5"
-  local tpl out
+  local tpl out transport_lines=""
+  # iOS AmneziaWG rejects Network/Format*; omit on UDP. TCP still needs them.
+  if [[ "${AWG_NETWORK}" == "tcp" ]]; then
+    transport_lines="Network = ${AWG_NETWORK}
+FormatIn = ${AWG_FORMAT_OUT}
+FormatOut = ${AWG_FORMAT_IN}
+"
+  fi
   tpl="$(cat "${REPO_DIR}/templates/client.conf.tpl")"
   out="$(_render_replace "$tpl" \
     CLIENT_ADDRESS "$client_addr" \
     CLIENT_PRIVATE_KEY "$client_priv" \
     AWG_MTU "$AWG_MTU" \
-    AWG_NETWORK "$AWG_NETWORK" \
-    AWG_FORMAT_IN "$AWG_FORMAT_IN" \
-    AWG_FORMAT_OUT "$AWG_FORMAT_OUT" \
+    TRANSPORT_LINES "$transport_lines" \
     JC "$JC" \
     JMIN "$JMIN" \
     JMAX "$JMAX" \

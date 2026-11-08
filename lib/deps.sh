@@ -168,7 +168,7 @@ _ufw_allow_once() {
 
 configure_ufw() {
   local port="$1" subnet="$2"
-  local proto="${AWG_NETWORK:-tcp}"
+  local proto="${AWG_NETWORK:-udp}"
   local prev_proto="${PREV_AWG_PROTO:-}"
   local egress p
   local -a ssh_ports=()

@@ -54,9 +54,10 @@ SERVER
   Interface:      awg0 (${SERVER_ADDRESS})
 
 CLIENT PROFILES
-  Use AmneziaWG / Amnezia VPN that supports Network=tcp when transport is tcp.
-  Scan the QR (or import the short .conf) once. After port/transport change,
-  delete the old tunnel and import again.
+  UDP (default): scan the QR or import the short .conf in AmneziaWG (iOS OK —
+  no Network/Format lines). TCP: conf includes Network/Format*; use a client
+  that accepts them (iOS AmneziaWG rejects TCP profiles — choose udp in wizard).
+  After port/transport change, delete the old tunnel and import again.
   Optional: import the .full.conf for the wider direct-route list, then remove
   the short tunnel so only one profile remains on the phone.
   IPv4 goes through the tunnel except private/service ranges and the direct

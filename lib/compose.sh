@@ -30,7 +30,7 @@ compose_up() {
 }
 
 wait_for_awg() {
-  local proto="${AWG_NETWORK:-tcp}"
+  local proto="${AWG_NETWORK:-udp}"
   local ss_flag="-uln"
   if [[ "$proto" == "tcp" ]]; then
     ss_flag="-tln"
