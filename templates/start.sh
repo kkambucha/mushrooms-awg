@@ -4,11 +4,88 @@
 set -euo pipefail
 
 CONF="/opt/amnezia/awg/awg0.conf"
+UAPI_FILE="/opt/amnezia/awg/transport.uapi"
 [[ -f "$CONF" ]] || { echo "ERROR: missing ${CONF}"; exit 1; }
 
 # Down any previous interface (restart path)
 awg-quick down "$CONF" 2>/dev/null || true
 awg-quick up "$CONF"
+
+_find_awg_sock() {
+  local s
+  for s in /var/run/amneziawg/awg0.sock /var/run/wireguard/awg0.sock; do
+    if [[ -S "$s" ]]; then
+      printf '%s' "$s"
+      return 0
+    fi
+  done
+  return 1
+}
+
+_uapi_set() {
+  local sock="$1"
+  local body="$2"
+  local reply line
+  # Bash can open a UNIX stream socket with <> on Linux.
+  exec 3<>"$sock" || return 1
+  # Trailing blank line ends the UAPI request.
+  printf 'set=1\n%s\n' "$body" >&3
+  reply=""
+  while IFS= read -r -t 3 line <&3; do
+    reply+="${line}"$'\n'
+    case "$line" in
+      errno=*) break ;;
+    esac
+  done || true
+  exec 3>&- 3<&- || true
+  printf '%s' "$reply"
+  printf '%s' "$reply" | grep -q 'errno=0'
+}
+
+_apply_transport_uapi() {
+  [[ -f "$UAPI_FILE" ]] || {
+    echo "WARN: missing ${UAPI_FILE}; leaving default UDP transport"
+    return 0
+  }
+  local sock body network listen_port reply
+  sock="$(_find_awg_sock)" || {
+    echo "ERROR: AmneziaWG UAPI socket not found after awg-quick up" >&2
+    return 1
+  }
+  body="$(cat "$UAPI_FILE")"
+  network="$(awk -F= '/^network=/{print $2; exit}' "$UAPI_FILE")"
+  listen_port="$(awk -F' *= *' 'tolower($1)=="listenport"{print $2; exit}' "$CONF")"
+
+  echo "Applying transport UAPI from ${UAPI_FILE} via ${sock}"
+  if ! reply="$(_uapi_set "$sock" "$body")"; then
+    echo "ERROR: UAPI set failed (daemon rejected transport?). Reply:" >&2
+    echo "$reply" >&2
+    return 1
+  fi
+  echo "UAPI transport applied (network=${network:-unknown})"
+
+  if [[ "$network" == "tcp" ]]; then
+    [[ -n "$listen_port" ]] || {
+      echo "ERROR: could not parse ListenPort from ${CONF}" >&2
+      return 1
+    }
+    local i
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+      if ss -tln 2>/dev/null | grep -qE ":${listen_port}\\b"; then
+        echo "TCP listen OK on :${listen_port}"
+        return 0
+      fi
+      sleep 1
+    done
+    echo "ERROR: transport=tcp but nothing listens on TCP :${listen_port}" >&2
+    ss -tlnp 2>/dev/null || true
+    ss -ulnp 2>/dev/null || true
+    return 1
+  fi
+  return 0
+}
+
+_apply_transport_uapi
 
 # Detect default egress interface for masquerade (host network mode)
 EGRESS="$(ip -4 route show default 2>/dev/null | awk '{print $5; exit}')"

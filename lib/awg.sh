@@ -47,9 +47,6 @@ EOF
     SERVER_ADDRESS "$SERVER_ADDRESS" \
     AWG_PORT "$AWG_PORT" \
     AWG_MTU "$AWG_MTU" \
-    AWG_NETWORK "$AWG_NETWORK" \
-    AWG_FORMAT_IN "$AWG_FORMAT_IN" \
-    AWG_FORMAT_OUT "$AWG_FORMAT_OUT" \
     JC "$JC" \
     JMIN "$JMIN" \
     JMAX "$JMAX" \
@@ -66,6 +63,16 @@ EOF
   umask 077
   printf '%s\n' "$out" >"${DEPLOY_DIR}/awg/awg0.conf"
   chmod 600 "${DEPLOY_DIR}/awg/awg0.conf"
+
+  # Server awg setconf rejects Network/Format*; apply via UAPI in start.sh.
+  local uapi="${DEPLOY_DIR}/awg/transport.uapi"
+  {
+    printf 'network=%s\n' "${AWG_NETWORK}"
+    printf 'format_in=%s\n' "${AWG_FORMAT_IN}"
+    printf 'format_out=%s\n' "${AWG_FORMAT_OUT}"
+  } >"$uapi"
+  chmod 600 "$uapi"
+  log "Wrote ${uapi} (network=${AWG_NETWORK})"
 }
 
 _write_client_conf() {
