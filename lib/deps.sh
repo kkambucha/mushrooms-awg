@@ -168,9 +168,13 @@ _ufw_allow_once() {
 
 configure_ufw() {
   local port="$1" subnet="$2"
+  local proto="${AWG_NETWORK:-tcp}"
+  local prev_proto="${PREV_AWG_PROTO:-}"
   local egress p
   local -a ssh_ports=()
   UFW_RELOADED="false"
+
+  [[ "$proto" == "tcp" || "$proto" == "udp" ]] || die "Refusing firewall rules for transport '${proto}'"
 
   log "Configuring firewall"
   _enable_ufw_ip_forward
@@ -197,10 +201,10 @@ configure_ufw() {
   if ((${#ssh_ports[@]} == 0)); then
     warn "Could not detect the SSH listen port. The firewall will not be switched on."
     if [[ "$active" == "false" ]]; then
-      log "Firewall stays off. Tunnel UDP ${port} stays reachable because nothing is filtering it."
+      log "Firewall stays off. Tunnel ${proto} ${port} stays reachable because nothing is filtering it."
       return 0
     fi
-    warn "Firewall is already on. Existing SSH rules were left unchanged. Opening tunnel UDP ${port} only."
+    warn "Firewall is already on. Existing SSH rules were left unchanged. Opening tunnel ${proto} ${port} only."
   else
     for p in "${ssh_ports[@]}"; do
       if ! _ufw_allow_once "${p}/tcp"; then
@@ -211,19 +215,21 @@ configure_ufw() {
     log "Firewall allows SSH on TCP: ${ssh_ports[*]}"
   fi
 
-  if [[ -n "${PREV_AWG_PORT:-}" && "$PREV_AWG_PORT" != "$port" ]]; then
-    if ufw --force delete allow "${PREV_AWG_PORT}/udp" >/dev/null 2>&1; then
-      log "Removed old tunnel UDP allow ${PREV_AWG_PORT}"
-    else
-      warn "Could not remove old UDP allow ${PREV_AWG_PORT} (may be absent). Continuing."
+  if [[ -n "${PREV_AWG_PORT:-}" && -n "$prev_proto" ]]; then
+    if [[ "$PREV_AWG_PORT" != "$port" || "$prev_proto" != "$proto" ]]; then
+      if ufw --force delete allow "${PREV_AWG_PORT}/${prev_proto}" >/dev/null 2>&1; then
+        log "Removed old tunnel allow ${PREV_AWG_PORT}/${prev_proto}"
+      else
+        warn "Could not remove old allow ${PREV_AWG_PORT}/${prev_proto} (may be absent). Continuing."
+      fi
     fi
   fi
 
-  if ! _ufw_allow_once "${port}/udp"; then
-    warn "Could not open tunnel UDP ${port}. Open it manually if needed. Continuing install."
+  if ! _ufw_allow_once "${port}/${proto}"; then
+    warn "Could not open tunnel ${proto} ${port}. Open it manually if needed. Continuing install."
     return 0
   fi
-  log "Firewall allows tunnel UDP ${port}"
+  log "Firewall allows tunnel ${proto} ${port}"
 
   if [[ "$active" == "false" ]]; then
     if ! ufw --force enable; then

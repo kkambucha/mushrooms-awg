@@ -60,6 +60,7 @@ main() {
   fi
 
   apply_wizard_port
+  ensure_transport_in_state
   validate_state_json "$STATE_JSON"
   export_state_vars
 

@@ -47,6 +47,9 @@ EOF
     SERVER_ADDRESS "$SERVER_ADDRESS" \
     AWG_PORT "$AWG_PORT" \
     AWG_MTU "$AWG_MTU" \
+    AWG_NETWORK "$AWG_NETWORK" \
+    AWG_FORMAT_IN "$AWG_FORMAT_IN" \
+    AWG_FORMAT_OUT "$AWG_FORMAT_OUT" \
     JC "$JC" \
     JMIN "$JMIN" \
     JMAX "$JMAX" \
@@ -77,6 +80,9 @@ _write_client_conf() {
     CLIENT_ADDRESS "$client_addr" \
     CLIENT_PRIVATE_KEY "$client_priv" \
     AWG_MTU "$AWG_MTU" \
+    AWG_NETWORK "$AWG_NETWORK" \
+    AWG_FORMAT_IN "$AWG_FORMAT_IN" \
+    AWG_FORMAT_OUT "$AWG_FORMAT_OUT" \
     JC "$JC" \
     JMIN "$JMIN" \
     JMAX "$JMAX" \

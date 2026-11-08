@@ -22,13 +22,18 @@ compose_up() {
 }
 
 wait_for_awg() {
-  log "Waiting for AmneziaWG on UDP :${AWG_PORT}"
+  local proto="${AWG_NETWORK:-tcp}"
+  local ss_flag="-uln"
+  if [[ "$proto" == "tcp" ]]; then
+    ss_flag="-tln"
+  fi
+  log "Waiting for AmneziaWG on ${proto^^} :${AWG_PORT}"
   local i
   for i in $(seq 1 45); do
     if docker ps --format '{{.Names}} {{.Status}}' | grep -q '^mushrooms_awg .*Up'; then
-      if ss -uln | grep -qE ":${AWG_PORT}\\b"; then
+      if ss $ss_flag | grep -qE ":${AWG_PORT}\\b"; then
         if docker exec mushrooms_awg awg show awg0 >/dev/null 2>&1; then
-          log "AmneziaWG is up (awg0 listening on ${AWG_PORT}/udp)"
+          log "AmneziaWG is up (awg0 listening on ${AWG_PORT}/${proto})"
           return 0
         fi
       fi
@@ -37,5 +42,5 @@ wait_for_awg() {
   done
   warn "Container logs:"
   docker logs --tail 80 mushrooms_awg 2>&1 || true
-  die "AmneziaWG did not become ready on UDP port ${AWG_PORT}"
+  die "AmneziaWG did not become ready on ${proto} port ${AWG_PORT}"
 }

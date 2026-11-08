@@ -48,12 +48,14 @@ RESTORE ON A NEW SERVER
 SERVER
   Domain:         ${DOMAIN}
   Public IP:      ${PUBLIC_IP:-unknown}
-  UDP port:       ${AWG_PORT}
+  Listen:         ${AWG_PORT}/${AWG_NETWORK}
   Image:          ${AWG_IMAGE}
   Interface:      awg0 (${SERVER_ADDRESS})
 
 CLIENT PROFILES
-  Scan the QR (or import the short .conf) once.
+  Use AmneziaWG / Amnezia VPN that supports Network=tcp when transport is tcp.
+  Scan the QR (or import the short .conf) once. After port/transport change,
+  delete the old tunnel and import again.
   Optional: import the .full.conf for the wider direct-route list, then remove
   the short tunnel so only one profile remains on the phone.
   IPv4 goes through the tunnel except private/service ranges and the direct
