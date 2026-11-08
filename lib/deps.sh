@@ -177,7 +177,7 @@ configure_ufw() {
   done < <(detect_ssh_ports)
 
   local active="false"
-  if ufw status | grep -qi '^Status: active'; then
+  if LC_ALL=C ufw status | grep -qi '^Status: active'; then
     active="true"
   fi
 
