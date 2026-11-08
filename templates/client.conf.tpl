@@ -17,7 +17,7 @@ H4 = __H4__
 
 [Peer]
 PublicKey = __SERVER_PUBLIC_KEY__
-PresharedKey = __SERVER_PSK__
+PresharedKey = __CLIENT_PSK__
 AllowedIPs = __ALLOWED_IPS__
 Endpoint = __DOMAIN__:__AWG_PORT__
 PersistentKeepalive = 25

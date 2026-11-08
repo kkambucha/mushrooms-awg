@@ -22,9 +22,18 @@ rand_alnum() {
 }
 
 rand_int() {
-  # inclusive range
+  # Inclusive range. openssl, not bash RANDOM (15 bits): H1–H4 need the full span.
   local lo="$1" hi="$2"
-  echo $((lo + RANDOM % (hi - lo + 1)))
+  local span=$((hi - lo + 1))
+  local limit r
+  limit=$(((4294967296 / span) * span))
+  while true; do
+    r=$((16#$(openssl rand -hex 4)))
+    if ((r < limit)); then
+      echo $((lo + r % span))
+      return 0
+    fi
+  done
 }
 
 rand_port() {
@@ -77,6 +86,23 @@ detect_public_ip() {
     ip="$(curl -4 -fsS --max-time 5 https://api.ipify.org 2>/dev/null || true)"
   fi
   printf '%s' "$ip"
+}
+
+detect_egress_iface() {
+  ip -4 route show default 2>/dev/null | awk '{print $5; exit}'
+}
+
+check_cpu_arch() {
+  local machine
+  machine="$(uname -m)"
+  case "$machine" in
+    x86_64|amd64) return 0 ;;
+  esac
+  if [[ -r /proc/sys/fs/binfmt_misc/qemu-x86_64 ]] || [[ -r /proc/sys/fs/binfmt_misc/qemu-x86_64-static ]]; then
+    warn "CPU is ${machine}. The tunnel image is amd64; continuing because qemu-x86_64 emulation is installed."
+    return 0
+  fi
+  die "CPU is ${machine}. The AmneziaWG image is amd64-only. Use an amd64 server, or install qemu-user-static and run this again. The firewall was not changed."
 }
 
 check_ubuntu() {

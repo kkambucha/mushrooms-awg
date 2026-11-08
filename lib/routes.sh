@@ -1,41 +1,63 @@
 #!/usr/bin/env bash
-# Build AllowedIPs as the complement of direct-route lists
+# Build AllowedIPs as the complement of direct-route lists.
+# IPv4 and IPv6 are separate: listed networks stay off the tunnel, the rest goes in.
+# Private ranges are always off the tunnel (same idea as the direct lists).
 
 ALLOWED_IPS_SHORT=""
 ALLOWED_IPS_FULL=""
 
 _routes_complement() {
-  # stdin: list of CIDRs (comments/blank allowed) -> stdout: complement of 0.0.0.0/0 as CSV
+  # args: route files. stdout: IPv4 complement, then IPv6 complement, one CSV.
   python3 - "$@" <<'PY'
 import ipaddress
 import sys
 
-nets = []
-for path in sys.argv[1:]:
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            nets.append(ipaddress.ip_network(line, strict=False))
 
-# Always keep LAN out of the tunnel
-for lan in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"):
-    nets.append(ipaddress.ip_network(lan))
+def load(paths):
+    v4, v6 = [], []
+    for path in paths:
+        with open(path, encoding="utf-8") as f:
+            for lineno, line in enumerate(f, 1):
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                try:
+                    net = ipaddress.ip_network(line, strict=False)
+                except ValueError as exc:
+                    raise SystemExit(f"Bad route {path}:{lineno}: {line} ({exc})") from exc
+                if net.version == 6:
+                    v6.append(net)
+                else:
+                    v4.append(net)
+    return v4, v6
 
-remaining = [ipaddress.ip_network("0.0.0.0/0")]
-for net in ipaddress.collapse_addresses(nets):
-    nxt = []
-    for block in remaining:
-        if net.subnet_of(block) or net == block:
-            if block.subnet_of(net):
-                continue
-            nxt.extend(block.address_exclude(net))
-        else:
-            nxt.append(block)
-    remaining = nxt
 
-print(",".join(str(n) for n in remaining))
+def complement(nets, universe, always):
+    nets = list(nets)
+    for item in always:
+        nets.append(ipaddress.ip_network(item))
+    remaining = [ipaddress.ip_network(universe)]
+    for net in ipaddress.collapse_addresses(nets):
+        nxt = []
+        for block in remaining:
+            if net.subnet_of(block) or net == block:
+                if block.subnet_of(net):
+                    continue
+                nxt.extend(block.address_exclude(net))
+            else:
+                nxt.append(block)
+        remaining = nxt
+    return remaining
+
+
+def joined(paths):
+    v4, v6 = load(paths)
+    parts = complement(v4, "0.0.0.0/0", ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"))
+    parts += complement(v6, "::/0", ("fc00::/7", "fe80::/10"))
+    return ",".join(str(n) for n in parts)
+
+
+print(joined(sys.argv[1:]))
 PY
 }
 

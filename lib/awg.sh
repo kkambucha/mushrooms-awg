@@ -24,18 +24,22 @@ render_awg0_conf() {
   tpl="$(cat "${REPO_DIR}/templates/awg0.conf.tpl")"
   peers=""
 
-  while IFS=$'\t' read -r client_pub client_addr; do
+  while IFS=$'\t' read -r client_pub client_addr client_psk; do
     [[ -n "$client_pub" ]] || continue
     peer_block="$(cat <<EOF
 
 [Peer]
 PublicKey = ${client_pub}
-PresharedKey = ${SERVER_PSK}
+PresharedKey = ${client_psk}
 AllowedIPs = ${client_addr}
 EOF
 )"
     peers+="$peer_block"
-  done < <(jq -r '.clients[] | [.public_key, .address] | @tsv' <<<"$STATE_JSON")
+  done < <(jq -r --arg fallback "${SERVER_PSK:-}" '
+    .clients[]
+    | [.public_key, .address, (if (.psk // "") != "" then .psk else $fallback end)]
+    | @tsv
+  ' <<<"$STATE_JSON")
 
   local out
   out="$(_render_replace "$tpl" \
@@ -66,6 +70,7 @@ _write_client_conf() {
   local client_priv="$2"
   local client_addr="$3"
   local allowed_ips="$4"
+  local client_psk="$5"
   local tpl out
   tpl="$(cat "${REPO_DIR}/templates/client.conf.tpl")"
   out="$(_render_replace "$tpl" \
@@ -84,7 +89,7 @@ _write_client_conf() {
     H3 "$H3" \
     H4 "$H4" \
     SERVER_PUBLIC_KEY "$SERVER_PUBLIC_KEY" \
-    SERVER_PSK "$SERVER_PSK" \
+    CLIENT_PSK "$client_psk" \
     ALLOWED_IPS "$allowed_ips" \
     DOMAIN "$DOMAIN" \
     AWG_PORT "$AWG_PORT")"
@@ -98,13 +103,13 @@ render_client_configs() {
   mkdir -p "${DEPLOY_DIR}/clients"
   QR_SKIPPED=()
 
-  local name priv addr short_path full_path short_bytes
-  while IFS=$'\t' read -r name priv addr; do
+  local name priv addr psk short_path full_path short_bytes
+  while IFS=$'\t' read -r name priv addr psk; do
     [[ -n "$name" ]] || continue
     short_path="${DEPLOY_DIR}/clients/${name}.conf"
     full_path="${DEPLOY_DIR}/clients/${name}.full.conf"
-    _write_client_conf "$short_path" "$priv" "$addr" "$ALLOWED_IPS_SHORT"
-    _write_client_conf "$full_path" "$priv" "$addr" "$ALLOWED_IPS_FULL"
+    _write_client_conf "$short_path" "$priv" "$addr" "$ALLOWED_IPS_SHORT" "$psk"
+    _write_client_conf "$full_path" "$priv" "$addr" "$ALLOWED_IPS_FULL" "$psk"
 
     short_bytes="$(wc -c <"$short_path" | tr -d ' ')"
     if (( short_bytes <= QR_MAX_BYTES )); then
@@ -116,5 +121,9 @@ render_client_configs() {
       warn "Config ${name}.conf is ${short_bytes} bytes (>${QR_MAX_BYTES}) — QR skipped; use the .conf file"
       rm -f "${DEPLOY_DIR}/clients/${name}.png"
     fi
-  done < <(jq -r '.clients[] | [.name, .private_key, .address] | @tsv' <<<"$STATE_JSON")
+  done < <(jq -r --arg fallback "${SERVER_PSK:-}" '
+    .clients[]
+    | [.name, .private_key, .address, (if (.psk // "") != "" then .psk else $fallback end)]
+    | @tsv
+  ' <<<"$STATE_JSON")
 }

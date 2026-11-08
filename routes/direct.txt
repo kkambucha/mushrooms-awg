@@ -20,3 +20,7 @@
 # Yandex published ranges (largest blocks that still fit a QR)
 95.108.128.0/17
 77.88.0.0/18
+
+# Yandex IPv6 (AS13238). 2a02:6b8::/29 covers the announced space.
+# Banks in this file had no public IPv6 aggregate to add.
+2a02:6b8::/29

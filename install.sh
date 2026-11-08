@@ -31,6 +31,7 @@ source "${REPO_DIR}/lib/summary.sh"
 main() {
   require_root
   check_ubuntu
+  check_cpu_arch
 
   echo
   echo "╔══════════════════════════════════════════════╗"
@@ -42,6 +43,7 @@ main() {
   echo "  → ${DEPLOY_DIR} is created only after dependencies succeed."
   echo
 
+  ensure_jq
   ask_config
   install_deps
   configure_sysctl
@@ -57,8 +59,8 @@ main() {
     create_new_state "$CLIENT_COUNT"
   fi
 
+  validate_state_json "$STATE_JSON"
   export_state_vars
-  configure_ufw "$AWG_PORT"
 
   prepare_deploy_dir
   write_state_file
@@ -68,6 +70,12 @@ main() {
 
   compose_up
   wait_for_awg
+  configure_ufw "$AWG_PORT" "$AWG_SUBNET"
+  if [[ "${UFW_RELOADED:-}" == "true" ]]; then
+    log "Restarting tunnel so firewall rules apply"
+    docker restart mushrooms_awg >/dev/null
+    wait_for_awg
+  fi
   write_summary
 
   log "Done. Deploy directory: ${DEPLOY_DIR}"

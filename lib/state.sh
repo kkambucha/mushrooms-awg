@@ -78,17 +78,16 @@ create_new_state() {
 
   docker pull --platform linux/amd64 "$AWG_IMAGE" >/dev/null
 
-  local server_priv server_pub psk port
+  local server_priv server_pub port
   server_priv="$(awg_genkey)"
   server_pub="$(printf '%s' "$server_priv" | awg_pubkey)"
-  psk="$(awg_genpsk)"
   port="$(rand_port)"
   generate_obfuscation
 
   local clients_json="[]"
   local i used_octets=()
   for ((i = 1; i <= count; i++)); do
-    local name ip cpriv cpub
+    local name ip cpriv cpub cpsk
     name="client${i}"
     if ((${#used_octets[@]})); then
       ip="$(_next_client_ip "${used_octets[@]}")"
@@ -98,12 +97,14 @@ create_new_state() {
     used_octets+=("${ip##*.}")
     cpriv="$(awg_genkey)"
     cpub="$(printf '%s' "$cpriv" | awg_pubkey)"
+    cpsk="$(awg_genpsk)"
     clients_json="$(jq -c \
       --arg name "$name" \
       --arg priv "$cpriv" \
       --arg pub "$cpub" \
       --arg addr "${ip}/32" \
-      '. + [{name:$name, private_key:$priv, public_key:$pub, address:$addr}]' <<<"$clients_json")"
+      --arg psk "$cpsk" \
+      '. + [{name:$name, private_key:$priv, public_key:$pub, address:$addr, psk:$psk}]' <<<"$clients_json")"
   done
 
   STATE_JSON="$(jq -n \
@@ -111,7 +112,6 @@ create_new_state() {
     --argjson port "$port" \
     --arg server_priv "$server_priv" \
     --arg server_pub "$server_pub" \
-    --arg psk "$psk" \
     --arg subnet "10.8.1.0/24" \
     --arg server_addr "10.8.1.1/24" \
     --argjson mtu 1280 \
@@ -135,7 +135,7 @@ create_new_state() {
       mtu: $mtu,
       server_private_key: $server_priv,
       server_public_key: $server_pub,
-      psk: $psk,
+      psk: "",
       obfuscation: {
         Jc: $jc, Jmin: $jmin, Jmax: $jmax,
         S1: $s1, S2: $s2, S3: $s3, S4: $s4,
@@ -177,7 +177,7 @@ add_clients_to_state() {
       i=$((i + 1))
       continue
     fi
-    local ip cpriv cpub
+    local ip cpriv cpub cpsk
     if ((${#used_octets[@]})); then
       ip="$(_next_client_ip "${used_octets[@]}")"
     else
@@ -186,12 +186,14 @@ add_clients_to_state() {
     used_octets+=("${ip##*.}")
     cpriv="$(awg_genkey)"
     cpub="$(printf '%s' "$cpriv" | awg_pubkey)"
+    cpsk="$(awg_genpsk)"
     STATE_JSON="$(jq -c \
       --arg name "$name" \
       --arg priv "$cpriv" \
       --arg pub "$cpub" \
       --arg addr "${ip}/32" \
-      '.clients += [{name:$name, private_key:$priv, public_key:$pub, address:$addr}]' <<<"$STATE_JSON")"
+      --arg psk "$cpsk" \
+      '.clients += [{name:$name, private_key:$priv, public_key:$pub, address:$addr, psk:$psk}]' <<<"$STATE_JSON")"
     existing_names+=$'\n'"$name"
     added=$((added + 1))
     i=$((i + 1))
@@ -207,11 +209,61 @@ write_state_file() {
   log "State saved to ${out}"
 }
 
+validate_state_json() {
+  local json="$1"
+  local err missing
+  err="$(jq -r '
+    def need_str(k):
+      if (.[k] | type) != "string" or (.[k] | length) == 0 then k else empty end;
+    def base:
+      [
+        need_str("domain"),
+        (if (.port | type) != "number" or .port < 1 or .port > 65535 then "port" else empty end),
+        need_str("server_private_key"),
+        need_str("server_public_key"),
+        need_str("server_address"),
+        (if (.subnet | type) != "string" then "subnet"
+         elif ((.subnet | contains("/")) | not) then "subnet"
+         else empty end),
+        (if (.mtu | type) != "number" then "mtu" else empty end),
+        (if (.clients | type) != "array" then "clients" else empty end),
+        (if (.obfuscation | type) != "object" then "obfuscation" else empty end)
+      ];
+    def obf:
+      if (.obfuscation | type) != "object" then empty
+      else
+        ["Jc","Jmin","Jmax","S1","S2","S3","S4","H1","H2","H3","H4"][] as $k
+        | if (.obfuscation[$k] | type) != "number" then "obfuscation." + $k else empty end
+      end;
+    def clients_bad:
+      if (.clients | type) != "array" then empty
+      else
+        .clients | to_entries[] | .key as $i | .value as $c
+        | ["name","private_key","public_key","address"][] as $k
+        | if ($c[$k] | type) != "string" or ($c[$k] | length) == 0 then "clients[\($i)].\($k)" else empty end
+      end;
+    def psk_bad:
+      if (.clients | type) != "array" or (.clients | length) == 0 then empty
+      elif (.psk | type) == "string" and (.psk | length) > 0 then empty
+      else
+        .clients | to_entries[]
+        | if (.value.psk | type) != "string" or (.value.psk | length) == 0 then "clients[\(.key)].psk" else empty end
+      end;
+    [base[], obf, clients_bad, psk_bad] | .[]
+  ' <<<"$json")" || die "Server file could not be checked. Firewall was not changed."
+  if [[ -n "$err" ]]; then
+    [[ -n "${STATE_PASTE_TEMP:-}" && -f "${STATE_PASTE_TEMP}" ]] && rm -f "${STATE_PASTE_TEMP}"
+    missing="${err//$'\n'/, }"
+    die "Server file is incomplete (missing or empty: ${missing}). Firewall was not changed and the saved server file was not overwritten."
+  fi
+}
+
 export_state_vars() {
   AWG_PORT="$(jq -r '.port' <<<"$STATE_JSON")"
   SERVER_PRIVATE_KEY="$(jq -r '.server_private_key' <<<"$STATE_JSON")"
   SERVER_PUBLIC_KEY="$(jq -r '.server_public_key' <<<"$STATE_JSON")"
-  SERVER_PSK="$(jq -r '.psk' <<<"$STATE_JSON")"
+  SERVER_PSK="$(jq -r '.psk // empty' <<<"$STATE_JSON")"
+  AWG_SUBNET="$(jq -r '.subnet // empty' <<<"$STATE_JSON")"
   SERVER_ADDRESS="$(jq -r '.server_address' <<<"$STATE_JSON")"
   AWG_MTU="$(jq -r '.mtu' <<<"$STATE_JSON")"
   JC="$(jq -r '.obfuscation.Jc' <<<"$STATE_JSON")"
