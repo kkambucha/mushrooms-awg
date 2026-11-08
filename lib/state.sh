@@ -81,7 +81,9 @@ create_new_state() {
   local server_priv server_pub port
   server_priv="$(awg_genkey)"
   server_pub="$(printf '%s' "$server_priv" | awg_pubkey)"
-  port="$(rand_port)"
+  port="${WIZARD_PORT:-443}"
+  [[ "$port" =~ ^[0-9]+$ ]] || die "UDP port must be a number"
+  (( port >= 1 && port <= 65535 )) || die "UDP port must be between 1 and 65535"
   generate_obfuscation
 
   local clients_json="[]"
@@ -200,6 +202,22 @@ add_clients_to_state() {
     added=$((added + 1))
     i=$((i + 1))
   done
+}
+
+apply_wizard_port() {
+  # Align STATE_JSON.port with wizard choice; remember previous for UFW cleanup.
+  PREV_AWG_PORT=""
+  local current
+  current="$(jq -r '.port' <<<"$STATE_JSON")"
+  if [[ -z "${WIZARD_PORT:-}" ]]; then
+    return 0
+  fi
+  if [[ "$WIZARD_PORT" == "$current" ]]; then
+    return 0
+  fi
+  PREV_AWG_PORT="$current"
+  STATE_JSON="$(jq --argjson port "$WIZARD_PORT" '.port = $port' <<<"$STATE_JSON")"
+  log "UDP port changed: ${PREV_AWG_PORT} → ${WIZARD_PORT}"
 }
 
 write_state_file() {

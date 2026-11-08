@@ -211,6 +211,14 @@ configure_ufw() {
     log "Firewall allows SSH on TCP: ${ssh_ports[*]}"
   fi
 
+  if [[ -n "${PREV_AWG_PORT:-}" && "$PREV_AWG_PORT" != "$port" ]]; then
+    if ufw --force delete allow "${PREV_AWG_PORT}/udp" >/dev/null 2>&1; then
+      log "Removed old tunnel UDP allow ${PREV_AWG_PORT}"
+    else
+      warn "Could not remove old UDP allow ${PREV_AWG_PORT} (may be absent). Continuing."
+    fi
+  fi
+
   if ! _ufw_allow_once "${port}/udp"; then
     warn "Could not open tunnel UDP ${port}. Open it manually if needed. Continuing install."
     return 0

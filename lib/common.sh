@@ -36,11 +36,6 @@ rand_int() {
   done
 }
 
-rand_port() {
-  # 20000-50000
-  echo $((20000 + RANDOM % 30001))
-}
-
 prompt() {
   # prompt "Label" "default" -> sets REPLY
   local label="$1"

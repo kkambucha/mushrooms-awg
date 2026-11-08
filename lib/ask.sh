@@ -47,6 +47,8 @@ ask_config() {
   REPLACE_LOCAL_STATE="false"
   CLIENT_COUNT="1"
   ADD_CLIENTS="0"
+  WIZARD_PORT="443"
+  PREV_AWG_PORT=""
 
   prompt "Domain name" ""
   normalize_domain "${REPLY}"
@@ -88,6 +90,7 @@ ask_config() {
     fi
   fi
 
+  local port_default="443"
   if [[ "$RESTORE_MODE" == "true" ]]; then
     local state_domain
     _require_jq
@@ -103,6 +106,7 @@ ask_config() {
       die "Domain mismatch: wizard=${DOMAIN}, state=${state_domain}. The firewall was not changed."
     fi
     validate_state_json "$(cat "$STATE_SOURCE")"
+    port_default="$(jq -r '.port' "$STATE_SOURCE")"
     prompt "How many new clients to add" "0"
     ADD_CLIENTS="${REPLY}"
     [[ "$ADD_CLIENTS" =~ ^[0-9]+$ ]] || die "Client count must be a number"
@@ -113,12 +117,18 @@ ask_config() {
     (( CLIENT_COUNT >= 1 )) || die "Need at least one client"
   fi
 
+  prompt "UDP port" "$port_default"
+  WIZARD_PORT="${REPLY}"
+  [[ "$WIZARD_PORT" =~ ^[0-9]+$ ]] || die "UDP port must be a number"
+  (( WIZARD_PORT >= 1 && WIZARD_PORT <= 65535 )) || die "UDP port must be between 1 and 65535"
+
   PUBLIC_IP="$(detect_public_ip)"
   echo
   log "Summary of choices"
   echo "  Domain:       ${DOMAIN}"
   echo "  Public IP:    ${PUBLIC_IP:-unknown}"
   echo "  Deploy dir:   ${DEPLOY_DIR}"
+  echo "  UDP port:     ${WIZARD_PORT}"
   if [[ "$RESTORE_MODE" == "true" ]]; then
     echo "  Mode:         restore from ${STATE_SOURCE_LABEL}"
     echo "  Add clients:  ${ADD_CLIENTS}"

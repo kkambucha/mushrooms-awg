@@ -59,6 +59,7 @@ main() {
     create_new_state "$CLIENT_COUNT"
   fi
 
+  apply_wizard_port
   validate_state_json "$STATE_JSON"
   export_state_vars
 
