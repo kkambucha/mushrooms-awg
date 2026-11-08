@@ -5,8 +5,8 @@ AWG_IMAGE="${AWG_IMAGE:-amneziavpn/amneziawg-go:3.1.20260828}"
 STATE_JSON=""
 
 _awg_run() {
-  # Run awg tools from the pinned image without starting a daemon
-  docker run --rm --platform linux/amd64 --entrypoint awg "$AWG_IMAGE" "$@"
+  # -i so pubkey can read the private key from stdin
+  docker run --rm -i --platform linux/amd64 --entrypoint awg "$AWG_IMAGE" "$@"
 }
 
 awg_genkey() {
