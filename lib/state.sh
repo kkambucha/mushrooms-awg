@@ -149,7 +149,9 @@ load_state_file() {
   local path="$1"
   log "Loading state from ${path}"
   STATE_JSON="$(jq -c '.' "$path")"
-  DOMAIN="$(jq -r '.domain' <<<"$STATE_JSON")"
+  normalize_domain "$(jq -r '.domain // empty' <<<"$STATE_JSON")"
+  DOMAIN="${REPLY}"
+  STATE_JSON="$(jq -c --arg domain "$DOMAIN" '.domain = $domain' <<<"$STATE_JSON")"
 }
 
 add_clients_to_state() {

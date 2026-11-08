@@ -49,13 +49,8 @@ ask_config() {
   ADD_CLIENTS="0"
 
   prompt "Domain name" ""
+  normalize_domain "${REPLY}"
   DOMAIN="${REPLY}"
-  [[ -n "$DOMAIN" ]] || die "Domain is required"
-  DOMAIN="${DOMAIN,,}"
-  DOMAIN="${DOMAIN#https://}"
-  DOMAIN="${DOMAIN#http://}"
-  DOMAIN="${DOMAIN%%/*}"
-  DOMAIN="${DOMAIN%.}"
 
   prompt "Path to existing server.json (optional)" ""
   STATE_SOURCE="${REPLY}"
@@ -101,9 +96,11 @@ ask_config() {
     fi
     state_domain="$(jq -r '.domain // empty' "$STATE_SOURCE")"
     [[ -n "$state_domain" ]] || die "State file has no domain: ${STATE_SOURCE_LABEL}"
+    normalize_domain "$state_domain"
+    state_domain="${REPLY}"
     if [[ "$state_domain" != "$DOMAIN" ]]; then
       [[ -n "${STATE_PASTE_TEMP}" ]] && rm -f "${STATE_PASTE_TEMP}"
-      die "Domain mismatch: wizard=${DOMAIN}, state=${state_domain}"
+      die "Domain mismatch: wizard=${DOMAIN}, state=${state_domain}. The firewall was not changed."
     fi
     validate_state_json "$(cat "$STATE_SOURCE")"
     prompt "How many new clients to add" "0"

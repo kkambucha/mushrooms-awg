@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# Build AllowedIPs as the complement of direct-route lists.
-# IPv4 and IPv6 are separate: listed networks stay off the tunnel, the rest goes in.
-# Private ranges are always off the tunnel (same idea as the direct lists).
+# Build AllowedIPs as the complement of direct-route lists (IPv4 only).
+# IPv6 entries in route files are validated then ignored — the phone keeps its own IPv6.
+# Private and service ranges are always off the tunnel (same idea as the direct lists).
 
 ALLOWED_IPS_SHORT=""
 ALLOWED_IPS_FULL=""
 
 _routes_complement() {
-  # args: route files. stdout: IPv4 complement, then IPv6 complement, one CSV.
+  # args: route files. stdout: IPv4 complement as one CSV.
   python3 - "$@" <<'PY'
 import ipaddress
 import sys
 
 
 def load(paths):
-    v4, v6 = [], []
+    v4 = []
     for path in paths:
         with open(path, encoding="utf-8") as f:
             for lineno, line in enumerate(f, 1):
@@ -26,10 +26,10 @@ def load(paths):
                 except ValueError as exc:
                     raise SystemExit(f"Bad route {path}:{lineno}: {line} ({exc})") from exc
                 if net.version == 6:
-                    v6.append(net)
-                else:
-                    v4.append(net)
-    return v4, v6
+                    # Kept in the file for documentation; not sent into the tunnel.
+                    continue
+                v4.append(net)
+    return v4
 
 
 def complement(nets, universe, always):
@@ -51,9 +51,17 @@ def complement(nets, universe, always):
 
 
 def joined(paths):
-    v4, v6 = load(paths)
-    parts = complement(v4, "0.0.0.0/0", ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"))
-    parts += complement(v6, "::/0", ("fc00::/7", "fe80::/10"))
+    v4 = load(paths)
+    always = (
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "127.0.0.0/8",
+        "169.254.0.0/16",
+        "224.0.0.0/4",
+        "240.0.0.0/4",
+    )
+    parts = complement(v4, "0.0.0.0/0", always)
     return ",".join(str(n) for n in parts)
 
 

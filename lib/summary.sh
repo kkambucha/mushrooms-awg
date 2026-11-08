@@ -56,8 +56,8 @@ CLIENT PROFILES
   Scan the QR (or import the short .conf) once.
   Optional: import the .full.conf for the wider direct-route list, then remove
   the short tunnel so only one profile remains on the phone.
-  Networks in the direct lists (and private LAN) stay off the tunnel, including
-  Yandex IPv6. Other IPv6 goes into the tunnel. Server peers stay IPv4-only.
+  IPv4 goes through the tunnel except private/service ranges and the direct
+  lists. IPv6 stays on the phone provider; the tunnel and peers are IPv4-only.
   AmneziaWG does not merge a second file into an existing tunnel.
 
 ${client_lines}

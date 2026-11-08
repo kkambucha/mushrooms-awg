@@ -21,6 +21,6 @@
 95.108.128.0/17
 77.88.0.0/18
 
-# Yandex IPv6 (AS13238). 2a02:6b8::/29 covers the announced space.
-# Banks in this file had no public IPv6 aggregate to add.
+# Yandex IPv6 (AS13238). Kept for documentation; client AllowedIPs are IPv4-only
+# so the phone keeps its own IPv6 (including this range) outside the tunnel.
 2a02:6b8::/29

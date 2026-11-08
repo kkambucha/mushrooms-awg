@@ -143,6 +143,16 @@ path.write_text(text, encoding="utf-8")
 PY
 }
 
+_ufw_allow_once() {
+  # Drop duplicate copies of the same allow rule, then add one.
+  # ufw delete exits non-zero when the rule is already gone — that ends the loop under set -e.
+  local rule="$1"
+  while ufw --force delete allow "$rule" >/dev/null 2>&1; do
+    :
+  done
+  ufw allow "$rule"
+}
+
 configure_ufw() {
   local port="$1" subnet="$2"
   local egress p
@@ -180,12 +190,12 @@ configure_ufw() {
     warn "Firewall is already on. Existing SSH rules were left unchanged. Opening tunnel UDP ${port} only."
   else
     for p in "${ssh_ports[@]}"; do
-      ufw allow "${p}/tcp"
+      _ufw_allow_once "${p}/tcp"
     done
     log "Firewall allows SSH on TCP: ${ssh_ports[*]}"
   fi
 
-  ufw allow "${port}/udp"
+  _ufw_allow_once "${port}/udp"
   log "Firewall allows tunnel UDP ${port}"
 
   if [[ "$active" == "false" ]]; then

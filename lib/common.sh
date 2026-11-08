@@ -131,3 +131,20 @@ json_escape() {
   s="${s//$'\t'/\\t}"
   printf '%s' "$s"
 }
+
+normalize_domain() {
+  # Strip scheme/path/trailing dot, lowercase, require a hostname (labels + a dot).
+  # Sets REPLY. Dies if empty or not a hostname (port/scheme leftovers). Firewall untouched.
+  local raw="${1-}"
+  local d="$raw"
+  d="${d,,}"
+  d="${d#https://}"
+  d="${d#http://}"
+  d="${d%%/*}"
+  d="${d%.}"
+  [[ -n "$d" ]] || die "Domain is required. The firewall was not changed."
+  if [[ ! "$d" =~ ^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]]; then
+    die "Domain must be a hostname (letters, digits, dots, hyphens; no port). Got: ${raw}. The firewall was not changed."
+  fi
+  REPLY="$d"
+}
