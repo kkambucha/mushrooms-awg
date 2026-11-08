@@ -1,0 +1,16 @@
+# Runtime / local secrets (deploy dir may be co-located)
+/DEPLOY.txt
+/state/
+/awg/
+/clients/
+/docker-compose.yml
+/start.sh
+*.key
+*.pem
+*.png
+*.conf
+!templates/
+!templates/**
+!routes/
+!routes/**
+.DS_Store

@@ -1,0 +1,22 @@
+# Short direct list for QR-sized client configs.
+# Traffic to these networks goes around the VPN (AllowedIPs is their complement).
+# LAN ranges are always added by lib/routes.sh.
+
+# Sber AS35237
+84.252.144.0/22
+
+# Alfa-Bank AS15632
+217.12.96.0/21
+
+# VTB AS24823
+217.14.48.0/20
+
+# T-Bank AS205638
+45.137.112.0/22
+
+# Ozon AS44386
+185.73.192.0/22
+
+# Yandex published ranges (largest blocks that still fit a QR)
+95.108.128.0/17
+77.88.0.0/18
